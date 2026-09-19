@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="WGT Caddie — putting meter and playing yardage calculator. Works fully offline." />
+  <title>WGT Caddie</title>
+  <style>
+    :root {
+      --bg: #0b100d;
+      --surface: #141c16;
+      --fg: #e8eee8;
+      --muted: #8a978c;
+      --subtle: #6b786e;
+      --primary: #5ea36a;
+      --primary-fg: #0b100d;
+      --border: #2a352c;
+      --warn: #c4a574;
+      --danger: #c47070;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --display: Georgia, "Times New Roman", Times, serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100dvh;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font);
+      -webkit-font-smoothing: antialiased;
+    }
+    body {
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -10%, color-mix(in oklab, var(--primary) 14%, transparent), transparent 60%),
+        repeating-linear-gradient(-18deg, transparent, transparent 13px, color-mix(in oklab, var(--primary) 3.5%, transparent) 13px, color-mix(in oklab, var(--primary) 3.5%, transparent) 14px);
+    }
+    button { font-family: inherit; cursor: pointer; }
+    input { font-family: inherit; }
+    .wrap {
+      max-width: 42rem;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 2.5rem;
+    }
+    @media (min-width: 1024px) { .wrap { max-width: 56rem; padding-top: 2.5rem; } }
+    .seg {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.25rem;
+      padding: 0.25rem;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .seg button {
+      height: 2.75rem;
+      border: 0;
+      border-radius: 0.5rem;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    .seg button.on { background: var(--primary); color: var(--primary-fg); }
+    .seg button:not(.on):hover { color: var(--fg); }
+    .seg.sm {
+      max-width: 12rem;
+      margin-left: auto;
+      margin-right: auto;
+      margin-bottom: 0.5rem;
+      padding: 0.15rem;
+      gap: 0.15rem;
+    }
+    .seg.sm button {
+      height: 1.75rem;
+      font-size: 0.7rem;
+      border-radius: 0.35rem;
+      font-weight: 500;
+    }
+    header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+    .eyebrow { margin: 0; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--primary); }
+    h1 { margin: 0.25rem 0 0; font-family: var(--display); font-size: 2.25rem; font-weight: 500; letter-spacing: -0.02em; }
+    .lede { margin: 0.25rem 0 0; font-size: 0.875rem; color: var(--muted); }
+    .icon-btn {
+      width: 2.75rem; height: 2.75rem; border: 0; border-radius: 0.5rem;
+      background: transparent; color: var(--muted);
+    }
+    .icon-btn:hover { color: var(--fg); background: var(--surface); }
+    .grid-app {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (min-width: 1024px) {
+      .grid-app { grid-template-columns: minmax(0, 1fr) 22rem; }
+      .meter { order: 2; position: sticky; top: 1.5rem; }
+      .forms { order: 1; }
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+    }
+    .forms { display: flex; flex-direction: column; gap: 1.25rem; }
+    .stack { display: flex; flex-direction: column; gap: 1.25rem; }
+    .label-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin-bottom: 0.5rem; }
+    .label-row label { font-size: 0.875rem; font-weight: 500; }
+    .unit { font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--subtle); }
+    .stepper { display: flex; align-items: center; gap: 0.5rem; }
+    .stepper input {
+      flex: 1; min-width: 0; height: 2.75rem;
+      border: 1px solid var(--border); border-radius: 0.5rem;
+      background: var(--bg); color: var(--fg);
+      text-align: center; font-weight: 500; font-variant-numeric: tabular-nums;
+      outline: none;
+    }
+    .stepper input:focus { box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 40%, transparent); }
+    .nudge {
+      width: 2.75rem; height: 2.75rem; flex-shrink: 0;
+      border: 1px solid var(--border); border-radius: 0.5rem;
+      background: var(--bg); color: var(--fg);
+    }
+    .nudge:hover { border-color: var(--muted); }
+    .chips { display: grid; gap: 0.5rem; }
+    .chips.green { grid-template-columns: 1fr 1fr; }
+    @media (min-width: 640px) { .chips.green { grid-template-columns: 1fr 1fr 1fr; } }
+    .chip {
+      min-height: 2.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      background: var(--bg);
+      color: var(--fg);
+      text-align: left;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .chip.row { flex-direction: row; justify-content: space-between; align-items: center; }
+    .chip.on { background: var(--primary); color: var(--primary-fg); border-color: color-mix(in oklab, var(--primary) 40%, transparent); }
+    .chip .hint { font-size: 0.75rem; color: var(--subtle); }
+    .chip.on .hint { color: inherit; opacity: 0.8; }
+    legend { font-size: 0.875rem; font-weight: 500; margin-bottom: 0.5rem; }
+    fieldset { border: 0; padding: 0; margin: 0; }
+    .wind {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr 1fr;
+      gap: 0.5rem;
+      max-width: 14rem;
+      margin: 0 auto;
+    }
+    .wind .cell {
+      height: 2.75rem;
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .wind .cell.on { background: var(--primary); color: var(--primary-fg); border-color: color-mix(in oklab, var(--primary) 40%, transparent); }
+    .pin { display: flex; align-items: center; justify-content: center; font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--subtle); }
+    .meter-kicker { margin: 0; font-size: 0.75rem; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+    .meter-val { display: flex; align-items: flex-end; gap: 0.5rem; margin-top: 0.25rem; }
+    .meter-val strong {
+      font-family: var(--display);
+      font-size: 3rem;
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    .meter-val span { font-size: 0.875rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .pct {
+      margin: 1rem 0 0;
+      font-family: var(--display);
+      font-size: 2.25rem;
+      font-weight: 500;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      color: var(--primary);
+    }
+    .pct.danger { color: var(--danger); }
+    .pct small { margin-left: 0.25rem; font-size: 1.125rem; color: var(--muted); }
+    .of { margin: 0.25rem 0 0; font-size: 0.75rem; color: var(--subtle); }
+    .bar { margin-top: 1rem; height: 0.75rem; background: var(--bg); border-radius: 999px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--primary); border-radius: 999px; width: 0%; }
+    .bar > i.over { background: var(--danger); }
+    .msg { margin: 0.75rem 0 0; font-size: 0.875rem; }
+    .msg.warn { color: var(--warn); }
+    .msg.danger { color: var(--danger); }
+    .msg.hint { color: var(--subtle); }
+    .break { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem; }
+    .break dt { font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--subtle); }
+    .break dd { margin: 0.25rem 0 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+    .hidden { display: none; }
+    svg { width: 1rem; height: 1rem; }
+    .footer {
+      margin-top: 2rem;
+      padding-top: 1rem;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--subtle);
+    }
+    .footer a {
+      color: var(--muted);
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .footer a:hover {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <div>
+        <p class="eyebrow">Yardage book</p>
+        <h1>WGT Caddie</h1>
+        <p class="lede">Putting meter and playing yardage, on the spot.</p>
+      </div>
+      <button type="button" class="icon-btn" id="reset" aria-label="Reset inputs" title="Reset">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      </button>
+    </header>
+
+    <div class="seg sm" role="radiogroup" aria-label="Unit system">
+      <button type="button" id="unit-imp" class="on" role="radio" aria-checked="true">Imperial</button>
+      <button type="button" id="unit-met" role="radio" aria-checked="false">Metric</button>
+    </div>
+
+    <div class="seg" role="tablist" aria-label="Caddie mode">
+      <button type="button" id="tab-putt" class="on" role="tab" aria-selected="true">Putting</button>
+      <button type="button" id="tab-shot" role="tab" aria-selected="false">Approach</button>
+    </div>
+
+    <div id="panel-putt" class="grid-app">
+      <section class="card meter" id="putt-meter"></section>
+      <div class="forms">
+        <section class="card stack">
+          <div>
+            <div class="label-row"><label for="putt-dist">Distance to hole</label><span class="unit" data-u="putt-dist">feet</span></div>
+            <div class="stepper">
+              <button type="button" class="nudge" data-nudge="putt-dist:-1" aria-label="Decrease Distance to hole">−</button>
+              <input id="putt-dist" inputmode="decimal" step="0.01" autocomplete="off" placeholder="0" />
+              <button type="button" class="nudge" data-nudge="putt-dist:1" aria-label="Increase Distance to hole">+</button>
+            </div>
+          </div>
+          <div>
+            <div class="label-row"><label for="putt-elev">Elevation change</label><span class="unit" data-u="putt-elev">inches</span></div>
+            <div class="stepper">
+              <button type="button" class="nudge" data-nudge="putt-elev:-1">−</button>
+              <input id="putt-elev" inputmode="decimal" step="0.01" autocomplete="off" placeholder="0" />
+              <button type="button" class="nudge" data-nudge="putt-elev:1">+</button>
+            </div>
+          </div>
+          <div class="seg" style="margin:0;background:var(--bg)">
+            <button type="button" id="putt-up" class="on">Uphill</button>
+            <button type="button" id="putt-dn">Downhill</button>
+          </div>
+          <div>
+            <div class="label-row"><label for="putt-gauge">Putter gauge</label><span class="unit" data-u="putt-gauge">feet</span></div>
+            <div class="stepper">
+              <button type="button" class="nudge" data-nudge="putt-gauge:-5">−</button>
+              <input id="putt-gauge" inputmode="decimal" step="0.01" autocomplete="off" placeholder="0" />
+              <button type="button" class="nudge" data-nudge="putt-gauge:5">+</button>
+            </div>
+          </div>
+          <fieldset>
+            <legend>Green speed</legend>
+            <div class="chips green" id="green-chips"></div>
+          </fieldset>
+        </section>
+      </div>
+    </div>
+
+    <div id="panel-shot" class="grid-app hidden">
+      <section class="card meter" id="shot-meter"></section>
+      <div class="forms">
+        <section class="card stack">
+          <div>
+            <div class="label-row"><label for="shot-dist">Distance to pin</label><span class="unit" data-u="shot-dist">yards</span></div>
+            <div class="stepper">
+              <button type="button" class="nudge" data-nudge="shot-dist:-1">−</button>
+              <input id="shot-dist" inputmode="decimal" step="0.01" autocomplete="off" placeholder="0" />
+              <button type="button" class="nudge" data-nudge="shot-dist:1">+</button>
+            </div>
+          </div>
+          <div>
+            <div class="label-row"><label for="shot-elev">Elevation change</label><span class="unit" data-u="shot-elev">feet</span></div>
+            <div class="stepper">
+              <button type="button" class="nudge" data-nudge="shot-elev:-1">−</button>
+              <input id="shot-elev" inputmode="decimal" step="0.01" autocomplete="off" placeholder="0" />
+              <button type="button" class="nudge" data-nudge="shot-elev:1">+</button>
+            </div>
+          </div>
+          <div class="seg" style="margin:0;background:var(--bg)">
+            <button type="button" id="shot-up" class="on">Uphill</button>
+            <button type="button" id="shot-dn">Downhill</button>
+          </div>
+          <div>
+            <div class="label-row"><label for="shot-gauge">Club gauge</label><span class="unit" data-u="shot-gauge">yards</span></div>
+            <div class="stepper">
+              <button type="button" class="nudge" data-nudge="shot-gauge:-5">−</button>
+              <input id="shot-gauge" inputmode="decimal" step="0.01" autocomplete="off" placeholder="0" />
+              <button type="button" class="nudge" data-nudge="shot-gauge:5">+</button>
+            </div>
+          </div>
+          <fieldset>
+            <legend>Lie</legend>
+            <div class="chips" id="lie-chips"></div>
+          </fieldset>
+          <div>
+            <div class="label-row"><label for="wind-speed">Wind speed</label><span class="unit">mph</span></div>
+            <div class="stepper">
+              <button type="button" class="nudge" data-nudge="wind-speed:-1">−</button>
+              <input id="wind-speed" inputmode="decimal" step="0.01" autocomplete="off" placeholder="0" />
+              <button type="button" class="nudge" data-nudge="wind-speed:1">+</button>
+            </div>
+          </div>
+          <fieldset>
+            <legend>Wind vs. target</legend>
+            <div class="wind">
+              <button type="button" class="cell" data-wind="head_left">H+L</button>
+              <button type="button" class="cell" data-wind="head">Head</button>
+              <button type="button" class="cell" data-wind="head_right">H+R</button>
+              <button type="button" class="cell" data-wind="cross_left">Left</button>
+              <div class="pin">Pin</div>
+              <button type="button" class="cell" data-wind="cross_right">Right</button>
+              <button type="button" class="cell" data-wind="tail_left">T+L</button>
+              <button type="button" class="cell" data-wind="tail">Tail</button>
+              <button type="button" class="cell" data-wind="tail_right">T+R</button>
+            </div>
+          </fieldset>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <a href="mailto:thor.lonning@gmail.com">Copyright: Thor Lønning Aarrestad @ 2026</a>
+  </footer>
+
+  <script>
+    const PUTT_HOLD_UP_FT = 1.5;
+    const M_TO_FT = 3.280839895;
+    const CM_TO_IN = 0.3937007874;
+    const IN_TO_FT = 1 / 12;
+    const STORAGE_KEY = "wgt-caddie-html-v1";
+
+    const GREEN_SPEEDS = [
+      { value: "1.00-slow", multiplier: 1.1, label: "Slow", stimp: "7.0" },
+      { value: "1.00-std", multiplier: 1.0, label: "Standard", stimp: "9.0" },
+      { value: "0.90", multiplier: 0.9, label: "Fast", stimp: "11.0" },
+      { value: "0.85", multiplier: 0.85, label: "Very Fast", stimp: "11.5" },
+      { value: "0.76", multiplier: 0.76, label: "Tournament", stimp: "12.0" },
+      { value: "0.74", multiplier: 0.74, label: "Championship", stimp: "13.0" },
+    ];
+    const LIE_SURFACES = [
+      { value: "0", adj: 0, label: "Tee / Fairway", hint: "No adjustment" },
+      { value: "0.125", adj: 0.125, label: "First Cut", hint: "+12.5%" },
+      { value: "0.25", adj: 0.25, label: "Deep Rough", hint: "+25%" },
+      { value: "0.35", adj: 0.35, label: "Heavy Rough", hint: "+35%" },
+      { value: "sand", adj: 0.25, label: "Sand / Bunker", hint: "+25%" },
+    ];
+
+    const DEFAULTS = {
+      units: "imperial",
+      tab: "putt",
+      puttDist: "0",
+      puttElev: "0",
+      puttUphill: true,
+      greenSpeed: "1.00-std",
+      puttGauge: "0",
+      shotDist: "0",
+      shotElev: "0",
+      shotUphill: true,
+      shotGauge: "0",
+      lie: "0",
+      windSpeed: "0",
+      windDir: "head",
+    };
+
+    const state = { ...DEFAULTS };
+
+    function parseNum(v) {
+      if (typeof v === "string") v = v.replace(",", ".");
+      const n = Number.parseFloat(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+    function formatNum(n, d) {
+      d = d == null ? 2 : d;
+      return Number.isFinite(n) ? n.toFixed(d) : "0.00";
+    }
+    function signedLabel(n, d, unit) {
+      const abs = formatNum(Math.abs(n), d);
+      const sign = n > 0 ? "+" : n < 0 ? "−" : "";
+      return sign + abs + (unit ? " " + unit : "");
+    }
+    function ftToDisplay(ft, units) {
+      return units === "metric" ? ft / M_TO_FT : ft;
+    }
+    function greenMultiplier(v) {
+      const found = GREEN_SPEEDS.find((g) => g.value === v);
+      return found ? found.multiplier : 1;
+    }
+    function lieAdjustment(v) {
+      const found = LIE_SURFACES.find((l) => l.value === v);
+      return found ? found.adj : 0;
+    }
+
+    function calcPutt(input) {
+      const dist = Math.max(0, input.distanceFt);
+      // elevationIn arrives as inches (imperial) or converted-from-cm inches (metric).
+      // Convert to feet before adding to distance.
+      const elevFt = Math.abs(input.elevationIn) * IN_TO_FT;
+      const gauge = Math.max(0, input.gaugeFt);
+      if (dist === 0 && elevFt === 0) {
+        return { signedElevFt: 0, targetFt: 0, percent: 0, overGauge: false, tapIt: false };
+      }
+      const signedElevFt = input.uphill ? elevFt : -elevFt;
+      const targetFt = (dist + signedElevFt) * input.greenMult + PUTT_HOLD_UP_FT;
+      const percent = gauge > 0 ? (targetFt / gauge) * 100 : 0;
+      return {
+        signedElevFt,
+        targetFt,
+        percent,
+        overGauge: gauge > 0 && targetFt > gauge && targetFt > 0,
+        tapIt: targetFt <= 0,
+      };
+    }
+
+    function calcFullShot(input) {
+      const dist = Math.max(0, input.distance);
+      const elev = Math.abs(input.elevation);
+      const elevAdj = input.metric
+        ? (input.uphill ? elev : -elev)
+        : (input.uphill ? elev : -elev) / 3;
+      const wind = Math.max(0, input.windMph);
+      let windAdj = 0;
+      let warning = "";
+      const headFull = dist * 0.005 * wind;
+      const tailFull = -(dist * 0.01 * wind);
+      // Pure directions
+      if (input.windDir === "head") {
+        windAdj = headFull;
+      } else if (input.windDir === "tail") {
+        windAdj = tailFull;
+      } else if (input.windDir === "cross_left") {
+        warning = "Aim left, into the wind, to hold the line.";
+      } else if (input.windDir === "cross_right") {
+        warning = "Aim right, into the wind, to hold the line.";
+      }
+      // Between / half directions (45° diagonals)
+      else if (input.windDir === "head_left") {
+        windAdj = headFull * 0.5;
+        warning = "Aim left, into the wind, to hold the line.";
+      } else if (input.windDir === "head_right") {
+        windAdj = headFull * 0.5;
+        warning = "Aim right, into the wind, to hold the line.";
+      } else if (input.windDir === "tail_left") {
+        windAdj = tailFull * 0.5;
+        warning = "Aim left, into the wind, to hold the line.";
+      } else if (input.windDir === "tail_right") {
+        windAdj = tailFull * 0.5;
+        warning = "Aim right, into the wind, to hold the line.";
+      }
+      const lieMult = 1 + input.lieAdj;
+      const playing = (dist + elevAdj + windAdj) * lieMult;
+      const gauge = Math.max(0, input.clubGauge);
+      const percent = gauge > 0 ? (playing / gauge) * 100 : 0;
+      return {
+        elevAdj,
+        windAdj,
+        lieMult,
+        playing,
+        percent,
+        overGauge: gauge > 0 && playing > gauge && playing > 0,
+        warning,
+      };
+    }
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        Object.assign(state, DEFAULTS, parsed);
+        if (state.units !== "metric") state.units = "imperial";
+        if (typeof state.puttGauge === "number") state.puttGauge = String(state.puttGauge);
+        if (typeof state.shotGauge === "number") state.shotGauge = String(state.shotGauge);
+        // Ensure numeric inputs always show a value (never blank)
+        ["puttDist", "puttElev", "puttGauge", "shotDist", "shotElev", "shotGauge", "windSpeed"].forEach((k) => {
+          if (state[k] === "" || state[k] == null) state[k] = "0";
+          else state[k] = String(state[k]);
+        });
+      } catch (e) { /* ignore */ }
+    }
+    function save() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+    }
+
+    function meterHTML(opts) {
+      const fill = Math.max(0, Math.min(100, opts.percent));
+      const danger = opts.dangerPercent ? " danger" : "";
+      const barOver = opts.over ? " over" : "";
+      let extra = "";
+      if (opts.over) extra = '<p class="msg danger">' + opts.overMessage + "</p>";
+      else if (opts.warn) extra = '<p class="msg warn">' + opts.warn + "</p>";
+      else if (opts.hint) extra = '<p class="msg hint">' + opts.hint + "</p>";
+      return (
+        '<p class="meter-kicker">' + opts.title + "</p>" +
+        '<div class="meter-val"><strong>' + formatNum(Math.max(0, opts.value)) + '</strong><span>' + opts.unit + "</span></div>" +
+        '<p class="pct' + danger + '">' + formatNum(Math.max(0, opts.percent)) + "<small>%</small></p>" +
+        '<p class="of">of the ' + opts.gaugeLabel + " gauge</p>" +
+        '<div class="bar"><i class="' + barOver + '" style="width:' + fill + '%"></i></div>' +
+        extra
+      );
+    }
+
+    function renderLabels() {
+      const metric = state.units === "metric";
+      document.getElementById("unit-imp").classList.toggle("on", !metric);
+      document.getElementById("unit-imp").setAttribute("aria-checked", String(!metric));
+      document.getElementById("unit-met").classList.toggle("on", metric);
+      document.getElementById("unit-met").setAttribute("aria-checked", String(metric));
+      document.querySelector('[data-u="putt-dist"]').textContent = metric ? "meters" : "feet";
+      document.querySelector('[data-u="putt-elev"]').textContent = metric ? "centimeters" : "inches";
+      document.querySelector('[data-u="putt-gauge"]').textContent = metric ? "meters" : "feet";
+      document.querySelector('[data-u="shot-dist"]').textContent = metric ? "meters" : "yards";
+      document.querySelector('[data-u="shot-elev"]').textContent = metric ? "meters" : "feet";
+      document.querySelector('[data-u="shot-gauge"]').textContent = metric ? "meters" : "yards";
+    }
+
+    function renderChips() {
+      document.getElementById("green-chips").innerHTML = GREEN_SPEEDS.map((g) => {
+        const on = state.greenSpeed === g.value ? " on" : "";
+        return '<button type="button" class="chip' + on + '" data-green="' + g.value + '"><span>' + g.label +
+          '</span><span class="hint">Stimp ' + g.stimp + " · " + g.multiplier.toFixed(2) + "×</span></button>";
+      }).join("");
+      document.getElementById("lie-chips").innerHTML = LIE_SURFACES.map((l) => {
+        const on = state.lie === l.value ? " on" : "";
+        return '<button type="button" class="chip row' + on + '" data-lie="' + l.value + '"><span>' + l.label +
+          '</span><span class="hint">' + l.hint + "</span></button>";
+      }).join("");
+      document.querySelectorAll("[data-wind]").forEach((btn) => {
+        btn.classList.toggle("on", btn.getAttribute("data-wind") === state.windDir);
+      });
+      document.getElementById("putt-up").classList.toggle("on", state.puttUphill);
+      document.getElementById("putt-dn").classList.toggle("on", !state.puttUphill);
+      document.getElementById("shot-up").classList.toggle("on", state.shotUphill);
+      document.getElementById("shot-dn").classList.toggle("on", !state.shotUphill);
+      document.getElementById("tab-putt").classList.toggle("on", state.tab === "putt");
+      document.getElementById("tab-shot").classList.toggle("on", state.tab === "shot");
+      document.getElementById("panel-putt").classList.toggle("hidden", state.tab !== "putt");
+      document.getElementById("panel-shot").classList.toggle("hidden", state.tab !== "shot");
+    }
+
+    function renderCalcs() {
+      const metric = state.units === "metric";
+      const distFt = metric ? parseNum(state.puttDist) * M_TO_FT : parseNum(state.puttDist);
+      const elevIn = metric ? parseNum(state.puttElev) * CM_TO_IN : parseNum(state.puttElev);
+      const gaugeFt = metric ? parseNum(state.puttGauge) * M_TO_FT : parseNum(state.puttGauge);
+      const putt = calcPutt({
+        distanceFt: distFt,
+        elevationIn: elevIn,
+        uphill: state.puttUphill,
+        greenMult: greenMultiplier(state.greenSpeed),
+        gaugeFt: gaugeFt,
+      });
+      const puttUnit = metric ? "m" : "ft";
+      const target = ftToDisplay(putt.targetFt, state.units);
+      const puttGaugeLabel = state.puttGauge === "" ? "—" : state.puttGauge + " " + puttUnit;
+      document.getElementById("putt-meter").innerHTML = meterHTML({
+        title: "Target distance",
+        value: target,
+        unit: puttUnit,
+        percent: putt.percent,
+        gaugeLabel: puttGaugeLabel,
+        over: putt.overGauge,
+        overMessage: "Beyond this gauge. Enter a longer putter gauge.",
+        warn: putt.tapIt ? "Downhill is doing the work. Just tap it." : "",
+        dangerPercent: putt.overGauge || putt.tapIt,
+      });
+
+      const shot = calcFullShot({
+        distance: parseNum(state.shotDist),
+        elevation: parseNum(state.shotElev),
+        uphill: state.shotUphill,
+        lieAdj: lieAdjustment(state.lie),
+        windMph: parseNum(state.windSpeed),
+        windDir: state.windDir,
+        metric: metric,
+        clubGauge: parseNum(state.shotGauge),
+      });
+      const shotUnit = metric ? "m" : "yd";
+      const shotGaugeLabel = state.shotGauge === "" ? "—" : state.shotGauge + " " + shotUnit;
+      document.getElementById("shot-meter").innerHTML = meterHTML({
+        title: metric ? "Total target playing meters" : "Playing yardage",
+        value: shot.playing,
+        unit: shotUnit,
+        percent: shot.percent,
+        gaugeLabel: shotGaugeLabel,
+        over: shot.overGauge,
+        overMessage: "Beyond this gauge. Enter a longer club gauge.",
+        warn: shot.warning,
+        hint: shot.warning ? "" : "Club to this number, not the raw pin distance.",
+        dangerPercent: shot.overGauge,
+      });
+    }
+
+    function syncInputs() {
+      document.getElementById("putt-dist").value = state.puttDist;
+      document.getElementById("putt-elev").value = state.puttElev;
+      document.getElementById("putt-gauge").value = state.puttGauge;
+      document.getElementById("shot-dist").value = state.shotDist;
+      document.getElementById("shot-elev").value = state.shotElev;
+      document.getElementById("shot-gauge").value = state.shotGauge;
+      document.getElementById("wind-speed").value = state.windSpeed;
+    }
+
+    function render() {
+      renderLabels();
+      renderChips();
+      renderCalcs();
+      save();
+    }
+
+    function bindInput(id, key) {
+      const el = document.getElementById(id);
+      el.addEventListener("input", () => {
+        let raw = el.value;
+        // Accept both comma and period as decimal separator (e.g. 2,6 or 2.6)
+        if (raw.includes(",") && !raw.includes(".")) {
+          raw = raw.replace(",", ".");
+          el.value = raw;
+        }
+        // Allow empty, integers, and up to 2 decimal places while typing
+        if (raw === "" || /^-?\d*\.?\d{0,2}$/.test(raw)) {
+          state[key] = raw;
+          render();
+        } else {
+          el.value = state[key];
+        }
+      });
+      el.addEventListener("focus", () => el.select());
+    }
+
+    load();
+    syncInputs();
+
+    document.getElementById("green-chips").innerHTML = "";
+    document.getElementById("lie-chips").innerHTML = "";
+
+    bindInput("putt-dist", "puttDist");
+    bindInput("putt-elev", "puttElev");
+    bindInput("putt-gauge", "puttGauge");
+    bindInput("shot-dist", "shotDist");
+    bindInput("shot-elev", "shotElev");
+    bindInput("shot-gauge", "shotGauge");
+    bindInput("wind-speed", "windSpeed");
+
+    document.getElementById("unit-imp").addEventListener("click", () => { state.units = "imperial"; render(); });
+    document.getElementById("unit-met").addEventListener("click", () => { state.units = "metric"; render(); });
+    document.getElementById("tab-putt").addEventListener("click", () => { state.tab = "putt"; render(); });
+    document.getElementById("tab-shot").addEventListener("click", () => { state.tab = "shot"; render(); });
+    document.getElementById("putt-up").addEventListener("click", () => { state.puttUphill = true; render(); });
+    document.getElementById("putt-dn").addEventListener("click", () => { state.puttUphill = false; render(); });
+    document.getElementById("shot-up").addEventListener("click", () => { state.shotUphill = true; render(); });
+    document.getElementById("shot-dn").addEventListener("click", () => { state.shotUphill = false; render(); });
+    document.getElementById("reset").addEventListener("click", () => {
+      const tab = state.tab;
+      const units = state.units;
+      Object.assign(state, DEFAULTS, { tab: tab, units: units });
+      syncInputs();
+      render();
+    });
+
+    document.body.addEventListener("click", (e) => {
+      const green = e.target.closest("[data-green]");
+      if (green) { state.greenSpeed = green.getAttribute("data-green"); render(); return; }
+      const lie = e.target.closest("[data-lie]");
+      if (lie) { state.lie = lie.getAttribute("data-lie"); render(); return; }
+      const wind = e.target.closest("[data-wind]");
+      if (wind) { state.windDir = wind.getAttribute("data-wind"); render(); return; }
+      const nudge = e.target.closest("[data-nudge]");
+      if (nudge) {
+        const parts = nudge.getAttribute("data-nudge").split(":");
+        const id = parts[0];
+        const dir = Number(parts[1]);
+        const map = {
+          "putt-dist": ["puttDist", 1],
+          "putt-elev": ["puttElev", 1],
+          "putt-gauge": ["puttGauge", state.units === "metric" ? 1 : 5],
+          "shot-dist": ["shotDist", 1],
+          "shot-elev": ["shotElev", 1],
+          "shot-gauge": ["shotGauge", 5],
+          "wind-speed": ["windSpeed", 1],
+        };
+        const spec = map[id];
+        const step = spec[1];
+        const key = spec[0];
+        const current = parseNum(state[key]);
+        const next = Math.max(0, Number((current + dir * step).toFixed(2)));
+        state[key] = String(next);
+        document.getElementById(id).value = state[key];
+        render();
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
